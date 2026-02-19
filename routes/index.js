@@ -139,12 +139,12 @@ router.delete(
 );
 
 // ========== RECEPTIONIST ROUTES ==========
-router.get(
-  "/receptionist/dashboard",
-  auth,
-  authorize("receptionist"),
-  receptionistController.getDashboard,
-);
+// router.get(
+//   "/receptionist/dashboard",
+//   auth,
+//   authorize("receptionist"),
+//   receptionistController.getDashboard,
+// );
 router.post(
   "/receptionist/appointments",
   auth,
@@ -342,6 +342,56 @@ router.get(
   auth,
   authorize("lab_technician"),
   labTechnicianController.getLabReports,
+);
+
+// ========== RECEPTIONIST ROUTES ==========
+router.get(
+  "/receptionist/dashboard",
+  auth,
+  authorize("receptionist"),
+  receptionistController.getDashboard,
+);
+
+// Patient management
+router.get(
+  "/receptionist/patients",
+  auth,
+  authorize("receptionist"),
+  receptionistController.getPatients,
+);
+router.get(
+  "/receptionist/patients/:id",
+  auth,
+  authorize("receptionist"),
+  receptionistController.getPatientById,
+);
+router.put(
+  "/receptionist/patients/:id",
+  auth,
+  authorize("receptionist"),
+  auditLog("UPDATE", "users"),
+  receptionistController.updatePatient,
+);
+
+// Appointments
+router.post(
+  "/receptionist/appointments",
+  auth,
+  authorize("receptionist"),
+  auditLog("CREATE", "appointments"),
+  receptionistController.createAppointment,
+);
+router.get(
+  "/receptionist/appointments",
+  auth,
+  authorize("receptionist"),
+  receptionistController.getAppointments,
+);
+router.get(
+  "/receptionist/daily-report",
+  auth,
+  authorize("receptionist"),
+  receptionistController.getDailyReport,
 );
 
 module.exports = router;

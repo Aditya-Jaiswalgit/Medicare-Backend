@@ -189,3 +189,173 @@ exports.getDailyReport = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
+// Add these functions to existing receptionistController.js
+
+// Get all patients
+exports.getPatients = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      search = "",
+      status = "",
+      gender = "",
+      blood_group = "",
+    } = req.query;
+    const offset = (page - 1) * limit;
+    const clinicId = req.user.clinic_id;
+
+    let query = `
+      SELECT u.id, u.email, u.full_name, u.phone, u.address, u.is_active, u.created_at,
+             pd.date_of_birth, pd.blood_group, pd.emergency_contact, pd.medical_history, pd.allergies,
+             (SELECT COUNT(*) FROM appointments WHERE patient_id = u.id AND status = 'completed') as total_visits,
+             (SELECT MAX(appointment_date) FROM appointments WHERE patient_id = u.id AND status = 'completed') as last_visit
+      FROM users u
+      LEFT JOIN patient_details pd ON u.id = pd.user_id
+      WHERE u.clinic_id = $1 AND u.role = 'patient'
+    `;
+    const params = [clinicId];
+
+    if (search) {
+      query += ` AND (u.full_name ILIKE $${params.length + 1} OR u.email ILIKE $${params.length + 1} OR u.phone ILIKE $${params.length + 1})`;
+      params.push(`%${search}%`);
+    }
+
+    if (status) {
+      const isActive = status === "Active";
+      query += ` AND u.is_active = $${params.length + 1}`;
+      params.push(isActive);
+    }
+
+    if (blood_group) {
+      query += ` AND pd.blood_group = $${params.length + 1}`;
+      params.push(blood_group);
+    }
+
+    // Get total count
+    const countQuery = query.replace(
+      "SELECT u.id, u.email, u.full_name, u.phone, u.address, u.is_active, u.created_at, pd.date_of_birth, pd.blood_group, pd.emergency_contact, pd.medical_history, pd.allergies, (SELECT COUNT(*) FROM appointments WHERE patient_id = u.id AND status = 'completed') as total_visits, (SELECT MAX(appointment_date) FROM appointments WHERE patient_id = u.id AND status = 'completed') as last_visit",
+      "SELECT COUNT(*)",
+    );
+    const countResult = await db.query(countQuery, params);
+
+    query += ` ORDER BY u.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(limit, offset);
+
+    const result = await db.query(query, params);
+
+    res.json({
+      success: true,
+      data: result.rows,
+      pagination: {
+        total: parseInt(countResult.rows[0].count),
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(countResult.rows[0].count / limit),
+      },
+    });
+  } catch (error) {
+    console.error("Get patients error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// Get patient by ID
+exports.getPatientById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const clinicId = req.user.clinic_id;
+
+    const result = await db.query(
+      `SELECT u.*, pd.date_of_birth, pd.blood_group, pd.emergency_contact, pd.medical_history, pd.allergies,
+              (SELECT COUNT(*) FROM appointments WHERE patient_id = u.id AND status = 'completed') as total_visits,
+              (SELECT MAX(appointment_date) FROM appointments WHERE patient_id = u.id AND status = 'completed') as last_visit
+       FROM users u
+       LEFT JOIN patient_details pd ON u.id = pd.user_id
+       WHERE u.id = $1 AND u.clinic_id = $2 AND u.role = 'patient'`,
+      [id, clinicId],
+    );
+
+    if (result.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Patient not found" });
+    }
+
+    delete result.rows[0].password;
+
+    res.json({
+      success: true,
+      data: result.rows[0],
+    });
+  } catch (error) {
+    console.error("Get patient error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// Update patient
+exports.updatePatient = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      full_name,
+      phone,
+      address,
+      date_of_birth,
+      blood_group,
+      emergency_contact,
+      allergies,
+      medical_history,
+    } = req.body;
+    const clinicId = req.user.clinic_id;
+
+    // Update user table
+    const userResult = await db.query(
+      `UPDATE users 
+       SET full_name = COALESCE($1, full_name),
+           phone = COALESCE($2, phone),
+           address = COALESCE($3, address),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $4 AND clinic_id = $5 AND role = 'patient'
+       RETURNING *`,
+      [full_name, phone, address, id, clinicId],
+    );
+
+    if (userResult.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Patient not found" });
+    }
+
+    // Update patient_details table
+    await db.query(
+      `UPDATE patient_details 
+       SET date_of_birth = COALESCE($1, date_of_birth),
+           blood_group = COALESCE($2, blood_group),
+           emergency_contact = COALESCE($3, emergency_contact),
+           allergies = COALESCE($4, allergies),
+           medical_history = COALESCE($5, medical_history),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = $6`,
+      [
+        date_of_birth,
+        blood_group,
+        emergency_contact,
+        allergies,
+        medical_history,
+        id,
+      ],
+    );
+
+    res.json({
+      success: true,
+      message: "Patient updated successfully",
+      data: userResult.rows[0],
+    });
+  } catch (error) {
+    console.error("Update patient error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};

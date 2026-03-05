@@ -353,6 +353,13 @@ router.get(
 );
 
 // Patient management
+// In your receptionist routes file
+router.get(
+  "/receptionist/doctors",
+  auth,
+  authorize("receptionist"),
+  receptionistController.getAllDoctors,
+);
 router.get(
   "/receptionist/patients",
   auth,

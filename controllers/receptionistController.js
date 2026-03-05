@@ -261,6 +261,33 @@ exports.getPatients = async (req, res) => {
   }
 };
 
+// In your receptionist controller
+exports.getAllDoctors = async (req, res) => {
+  try {
+    const clinicId = req.user.clinic_id;
+
+    const doctorsResult = await db.query(
+      `SELECT id, full_name, email, department, specialization, 
+              is_active, phone, created_at
+       FROM users 
+       WHERE clinic_id = $1 AND role = 'doctor' AND is_active = true
+       ORDER BY full_name`, // ← Changed from 'name' to 'full_name'
+      [clinicId],
+    );
+
+    res.status(200).json({
+      success: true,
+      data: doctorsResult.rows,
+    });
+  } catch (error) {
+    console.error("Error fetching doctors:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch doctors",
+    });
+  }
+};
+
 // Get patient by ID
 exports.getPatientById = async (req, res) => {
   try {
